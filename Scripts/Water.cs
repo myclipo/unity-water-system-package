@@ -123,7 +123,7 @@ namespace WaterSystem
             newPos.x = quantizeValue * (int) (newPos.x / quantizeValue);
             newPos.z = quantizeValue * (int) (newPos.z / quantizeValue);
 
-            var matrix = Matrix4x4.TRS(newPos + transform.position, Quaternion.identity, transform.localScale); // transform.localToWorldMatrix;
+            var matrix = Matrix4x4.TRS(newPos + transform.position, Quaternion.identity, Vector3.one); // transform.localToWorldMatrix;
 
             foreach (var mesh in resources.defaultWaterMeshes)
             {
@@ -171,8 +171,7 @@ namespace WaterSystem
             {
                 resources = Resources.Load("WaterResources") as WaterResources;
             }
-            if(Application.platform != RuntimePlatform.WebGLPlayer) // TODO - bug with Opengl depth
-                Invoke(nameof(CaptureDepthMap), 1.0f);
+            Invoke(nameof(CaptureDepthMap), 1.0f);
         }
 
         private void LateUpdate()

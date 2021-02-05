@@ -68,16 +68,7 @@ float2 AdjustedDepth(half2 uvs, half4 additionalData)
 {
 	float rawD = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, sampler_ScreenTextures_linear_clamp, uvs);
 	float d = LinearEyeDepth(rawD, _ZBufferParams);
-
-	// TODO: Changing the usage of UNITY_REVERSED_Z this way to fix testing, but I'm not sure the original code is correct anyway.
-	// In OpenGL, rawD should already have be remmapped before converting depth to linear eye depth.
-#if UNITY_REVERSED_Z
-	float offset = 0;
-#else
-	float offset = 1;
-#endif
-	
- 	return float2(d * additionalData.x - additionalData.y, (rawD * -_ProjectionParams.x) + offset);
+	return float2(d * additionalData.x - additionalData.y, (rawD * -_ProjectionParams.x) + (1-UNITY_REVERSED_Z));
 }
 
 float WaterTextureDepth(float3 posWS)
@@ -215,21 +206,9 @@ half4 WaterFragment(WaterVertexOutput IN) : SV_Target
 	IN.normal += half3(1-waterFX.y, 0.5h, 1-waterFX.z) - 0.5;
 	IN.normal = normalize(IN.normal);
 
-    // Distortion
-	half2 distortion = DistortionUVs(depth.x, IN.normal);
-	distortion = screenUV.xy + distortion;// * clamp(depth.x, 0, 5);
-	float d = depth.x;
-	depth.xz = AdjustedDepth(distortion, IN.additionalData);
-	distortion = depth.x < 0 ? screenUV.xy : distortion;
-	depth.x = depth.x < 0 ? d : depth.x;
-
-    // Fresnel
-	half fresnelTerm = CalculateFresnelTerm(IN.normal, IN.viewDir.xyz);
-	//return fresnelTerm.xxxx;
-
 	// Lighting
 	Light mainLight = GetMainLight(TransformWorldToShadowCoord(IN.posWS));
-    half shadow = SoftShadows(screenUV, IN.posWS, IN.viewDir.xyz, depth.x);
+    half shadow = SoftShadows(screenUV, IN.posWS);
     half3 GI = SampleSH(IN.normal);
 
     // SSS
@@ -249,9 +228,20 @@ half4 WaterFragment(WaterVertexOutput IN) : SV_Target
 	// Foam lighting
 	half3 foam = foamMask.xxx * (mainLight.shadowAttenuation * mainLight.color + GI);
 
+	// Distortion
+	half2 distortion = DistortionUVs(depth.x, IN.normal);
+	distortion = screenUV.xy + distortion;// * clamp(depth.x, 0, 5);
+	float d = depth.x;
+	depth.xz = AdjustedDepth(distortion, IN.additionalData);
+	distortion = depth.x < 0 ? screenUV.xy : distortion;
+	depth.x = depth.x < 0 ? d : depth.x;
+
+	// Fresnel
+	half fresnelTerm = CalculateFresnelTerm(IN.normal, IN.viewDir.xyz);
+	//return fresnelTerm.xxxx;
+
     BRDFData brdfData;
-    half alpha = 1;
-    InitializeBRDFData(half3(0, 0, 0), 0, half3(1, 1, 1), 0.95, alpha, brdfData);
+    InitializeBRDFData(half3(0, 0, 0), 0, half3(1, 1, 1), 0.95, 1, brdfData);
 	half3 spec = DirectBDRF(brdfData, IN.normal, mainLight.direction, IN.viewDir) * shadow * mainLight.color;
 #ifdef _ADDITIONAL_LIGHTS
     uint pixelLightCount = GetAdditionalLightsCount();

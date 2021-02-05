@@ -44,7 +44,7 @@ namespace WaterSystem
 
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
-                CommandBuffer cmd = CommandBufferPool.Get();
+                CommandBuffer cmd = CommandBufferPool.Get(k_RenderWaterFXTag);
                 using (new ProfilingScope(cmd, m_WaterFX_Profile)) // makes sure we have profiling ability
                 {
                     context.ExecuteCommandBuffer(cmd);
@@ -61,7 +61,7 @@ namespace WaterSystem
                 CommandBufferPool.Release(cmd);
             }
 
-            public override void OnCameraCleanup(CommandBuffer cmd) 
+            public override void FrameCleanup(CommandBuffer cmd)
             {
                 // since the texture is used within the single cameras use we need to cleanup the RT afterwards
                 cmd.ReleaseTemporaryRT(m_WaterFX.id);
@@ -86,15 +86,14 @@ namespace WaterSystem
                 if (cam.cameraType == CameraType.Preview || !WaterCausticMaterial)
                     return;
 
-                CommandBuffer cmd = CommandBufferPool.Get();
+                var sunMatrix = RenderSettings.sun != null
+                    ? RenderSettings.sun.transform.localToWorldMatrix
+                    : Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(-45f, 45f, 0f), Vector3.one);
+                WaterCausticMaterial.SetMatrix("_MainLightDir", sunMatrix);
+                
+                CommandBuffer cmd = CommandBufferPool.Get(k_RenderWaterCausticsTag);
                 using (new ProfilingScope(cmd, m_WaterCaustics_Profile))
                 {
-                    var sunMatrix = RenderSettings.sun != null
-                        ? RenderSettings.sun.transform.localToWorldMatrix
-                        : Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(-45f, 45f, 0f), Vector3.one);
-                    WaterCausticMaterial.SetMatrix("_MainLightDir", sunMatrix);
-                
-                
                     // Create mesh if needed
                     if (!m_mesh)
                         m_mesh = GenerateCausticsMesh(1000f);
@@ -118,15 +117,13 @@ namespace WaterSystem
         WaterCausticsPass m_CausticsPass;
 
         public WaterSystemSettings settings = new WaterSystemSettings();
-        [HideInInspector][SerializeField] private Shader causticShader;
-        [HideInInspector][SerializeField] private Texture2D causticTexture;
+        [SerializeField] private Shader causticShader;
 
         private Material _causticMaterial;
 
         private static readonly int SrcBlend = Shader.PropertyToID("_SrcBlend");
         private static readonly int DstBlend = Shader.PropertyToID("_DstBlend");
         private static readonly int Size = Shader.PropertyToID("_Size");
-        private static readonly int CausticTexture = Shader.PropertyToID("_CausticMap");
 
         public override void Create()
         {
@@ -142,17 +139,9 @@ namespace WaterSystem
             {
                 DestroyImmediate(_causticMaterial);
             }
+            
             _causticMaterial = CoreUtils.CreateEngineMaterial(causticShader);
             _causticMaterial.SetFloat("_BlendDistance", settings.causticBlendDistance);
-            
-            if (causticTexture == null)
-            {
-                Debug.Log("Caustics Texture missing, attempting to load.");
-#if UNITY_EDITOR
-                causticTexture = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>("Packages/com.verasl.water-system/Textures/WaterSurface_single.tif");
-#endif
-            }
-            _causticMaterial.SetTexture(CausticTexture, causticTexture);
             
             switch (settings.debug)
             {
