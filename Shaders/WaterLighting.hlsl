@@ -5,7 +5,7 @@
 
 half CalculateFresnelTerm(half3 normalWS, half3 viewDirectionWS)
 {
-    return saturate(pow(1.0 - dot(normalWS, viewDirectionWS), 5));//fresnel TODO - find a better place
+    return pow(1.0 - saturate(dot(normalWS, viewDirectionWS)), 5);//fresnel TODO - find a better place
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -45,31 +45,11 @@ half3 Highlights(half3 positionWS, half roughness, half3 normalWS, half3 viewDir
     return specularTerm * mainLight.color * mainLight.distanceAttenuation;
 }
 
-//Soft Shadows
-half SoftShadows(float3 screenUV, float3 positionWS)
-{
-    half2 jitterUV = screenUV.xy * _ScreenParams.xy * _DitherPattern_TexelSize.xy;
-	half shadowAttenuation = 0;
-	
-	uint loop = 4;
-	float loopDiv = 1.0 / loop;
-	for (uint i = 0u; i < loop; ++i)
-    {
-#ifndef _STATIC_WATER
-        jitterUV += frac(half2(_Time.x, -_Time.z));
-#endif
-        float3 jitterTexture = SAMPLE_TEXTURE2D(_DitherPattern, sampler_DitherPattern, jitterUV + i * _ScreenParams.xy).xyz * 2 - 1;
-	    float3 lightJitter = positionWS + jitterTexture.xzy * 2;
-	    shadowAttenuation += SAMPLE_TEXTURE2D_SHADOW(_MainLightShadowmapTexture, sampler_MainLightShadowmapTexture, TransformWorldToShadowCoord(lightJitter));
-	}
-    return BEYOND_SHADOW_FAR(TransformWorldToShadowCoord(positionWS * 1.1)) ? 1.0 : shadowAttenuation * loopDiv;
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 //                           Reflection Modes                                //
 ///////////////////////////////////////////////////////////////////////////////
 
-half3 SampleReflections(half3 normalWS, half3 viewDirectionWS, half2 screenUV, half roughness)
+half3 SampleReflections(half3 normalWS, half3 viewDirectionWS, half2 screenUV, half fresnelTerm, half roughness)
 {
     half3 reflection = 0;
     half2 refOffset = 0;
@@ -89,13 +69,13 @@ half3 SampleReflections(half3 normalWS, half3 viewDirectionWS, half2 screenUV, h
 
     half3 viewNormal = mul(normalWS, (float3x3)GetWorldToViewMatrix()).xyz;
     half3 reflectVector = reflect(-viewDir, viewNormal);
-
+    
     half2 reflectionUV = screenUV + normalWS.zx * half2(0.02, 0.15);
     reflection += SAMPLE_TEXTURE2D_LOD(_PlanarReflectionTexture, sampler_ScreenTextures_linear_clamp, reflectionUV, 6 * roughness).rgb;//planar reflection
 #endif
     //do backup
     //return reflectVector.yyy;
-    return reflection;
+    return reflection * fresnelTerm;
 }
 
 #endif // WATER_LIGHTING_INCLUDED

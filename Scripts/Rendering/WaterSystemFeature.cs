@@ -12,7 +12,6 @@ namespace WaterSystem
         class WaterFxPass : ScriptableRenderPass
         {
             private const string k_RenderWaterFXTag = "Render Water FX";
-            private ProfilingSampler m_WaterFX_Profile = new ProfilingSampler(k_RenderWaterFXTag);
             private readonly ShaderTagId m_WaterFXShaderTag = new ShaderTagId("WaterFX");
             private readonly Color m_ClearColor = new Color(0.0f, 0.5f, 0.5f, 0.5f); //r = foam mask, g = normal.x, b = normal.z, a = displacement
             private FilteringSettings m_FilteringSettings;
@@ -45,7 +44,7 @@ namespace WaterSystem
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
                 CommandBuffer cmd = CommandBufferPool.Get(k_RenderWaterFXTag);
-                using (new ProfilingScope(cmd, m_WaterFX_Profile)) // makes sure we have profiling ability
+                using (new ProfilingSample(cmd, k_RenderWaterFXTag)) // makes sure we have profiling ability
                 {
                     context.ExecuteCommandBuffer(cmd);
                     cmd.Clear();
@@ -75,7 +74,6 @@ namespace WaterSystem
         class WaterCausticsPass : ScriptableRenderPass
         {
             private const string k_RenderWaterCausticsTag = "Render Water Caustics";
-            private ProfilingSampler m_WaterCaustics_Profile = new ProfilingSampler(k_RenderWaterCausticsTag);
             public Material WaterCausticMaterial;
             private static Mesh m_mesh;
 
@@ -86,13 +84,8 @@ namespace WaterSystem
                 if (cam.cameraType == CameraType.Preview || !WaterCausticMaterial)
                     return;
 
-                var sunMatrix = RenderSettings.sun != null
-                    ? RenderSettings.sun.transform.localToWorldMatrix
-                    : Matrix4x4.TRS(Vector3.zero, Quaternion.Euler(-45f, 45f, 0f), Vector3.one);
-                WaterCausticMaterial.SetMatrix("_MainLightDir", sunMatrix);
-                
                 CommandBuffer cmd = CommandBufferPool.Get(k_RenderWaterCausticsTag);
-                using (new ProfilingScope(cmd, m_WaterCaustics_Profile))
+                using (new ProfilingSample(cmd, k_RenderWaterCausticsTag))
                 {
                     // Create mesh if needed
                     if (!m_mesh)
@@ -102,6 +95,7 @@ namespace WaterSystem
                     var position = cam.transform.position;
                     position.y = 0; // TODO should read a global 'water height' variable.
                     var matrix = Matrix4x4.TRS(position, Quaternion.identity, Vector3.one);
+
                     // Setup the CommandBuffer and draw the mesh with the caustic material and matrix
                     cmd.DrawMesh(m_mesh, matrix, WaterCausticMaterial, 0, 0);
                 }
@@ -117,7 +111,8 @@ namespace WaterSystem
         WaterCausticsPass m_CausticsPass;
 
         public WaterSystemSettings settings = new WaterSystemSettings();
-        [SerializeField] private Shader causticShader;
+        [SerializeField]
+        private Shader causticShader;
 
         private Material _causticMaterial;
 
@@ -134,15 +129,8 @@ namespace WaterSystem
             m_CausticsPass = new WaterCausticsPass();
 
             causticShader = causticShader ? causticShader : Shader.Find("Hidden/BoatAttack/Caustics");
-            if (causticShader == null) return;
-            if (_causticMaterial)
-            {
-                DestroyImmediate(_causticMaterial);
-            }
-            
-            _causticMaterial = CoreUtils.CreateEngineMaterial(causticShader);
-            _causticMaterial.SetFloat("_BlendDistance", settings.causticBlendDistance);
-            
+            _causticMaterial = _causticMaterial ? _causticMaterial : new Material(causticShader);
+
             switch (settings.debug)
             {
                 case WaterSystemSettings.DebugMode.Caustics:
@@ -207,8 +195,6 @@ namespace WaterSystem
         {
             [Header("Caustics Settings")] [Range(0.1f, 1f)]
             public float causticScale = 0.25f;
-
-            public float causticBlendDistance = 3f;
 
             [Header("Advanced Settings")] public DebugMode debug = DebugMode.Disabled;
 

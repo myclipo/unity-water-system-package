@@ -69,11 +69,13 @@ public static class LocalToWorldJob
 
     public static void Cleanup(int guid)
     {
-        if (!Data.ContainsKey(guid)) return;
-        Data[guid].Handle.Complete();
-        Data[guid].PositionsWorld.Dispose();
-        Data[guid].PositionsLocal.Dispose();
-        Data.Remove(guid);
+        if (Data.ContainsKey(guid))
+        {
+            Data[guid].Handle.Complete();
+            Data[guid].PositionsWorld.Dispose();
+            Data[guid].PositionsLocal.Dispose();
+            Data.Remove(guid);
+        }
     }
 
     class TransformLocalToWorld
